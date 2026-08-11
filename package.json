@@ -1,0 +1,16 @@
+{
+  "name": "ai-inventory-system-root",
+  "version": "1.0.0",
+  "description": "AI-Based Inventory Management System for Small Retail Businesses",
+  "scripts": {
+    "start": "docker compose up --build",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:ai": "cd ai && python3 app.py",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:ai\"",
+    "install:all": "npm install --prefix backend && npm install --prefix frontend && pip3 install -r ai/requirements.txt"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
