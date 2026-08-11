@@ -46,6 +46,8 @@ const AIReorderHub = () => {
         padding: '1.5rem',
         background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%)',
         display: 'flex',
+        flexWrap: 'wrap',
+        gap: '1rem',
         alignItems: 'center',
         justifyContent: 'space-between'
       }}>

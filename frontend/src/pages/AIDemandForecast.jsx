@@ -65,6 +65,8 @@ const AIDemandForecast = () => {
         padding: '1.5rem',
         background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%)',
         display: 'flex',
+        flexWrap: 'wrap',
+        gap: '1rem',
         alignItems: 'center',
         justifyContent: 'space-between'
       }}>
@@ -91,7 +93,7 @@ const AIDemandForecast = () => {
       </div>
 
       {/* Main Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
         {/* Product Forecast Selection List */}
         <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Select Product</h3>

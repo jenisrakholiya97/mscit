@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { getOwnerId } = require('../utils/authUtils');
 
 exports.createPurchase = async (req, res) => {
     const connection = await db.getConnection();
@@ -7,6 +8,7 @@ exports.createPurchase = async (req, res) => {
 
         const { supplier_id, notes, items } = req.body;
         const userId = req.user ? req.user.id : null;
+        const ownerId = getOwnerId(req.user);
 
         if (!items || !Array.isArray(items) || items.length === 0) {
             await connection.rollback();
@@ -29,9 +31,9 @@ exports.createPurchase = async (req, res) => {
         }
 
         const [purchaseRes] = await connection.query(
-            `INSERT INTO Purchases (supplier_id, user_id, total_amount, status, notes)
-             VALUES (?, ?, ?, 'Completed', ?)`,
-            [supplier_id || null, userId, totalAmount, notes || 'Standard Stock Replenishment']
+            `INSERT INTO Purchases (supplier_id, user_id, total_amount, status, notes, owner_id)
+             VALUES (?, ?, ?, 'Completed', ?, ?)`,
+            [supplier_id || null, userId, totalAmount, notes || 'Standard Stock Replenishment', ownerId]
         );
 
         const purchaseId = purchaseRes.insertId;
@@ -51,9 +53,9 @@ exports.createPurchase = async (req, res) => {
 
             // Add Audit Log
             await connection.query(
-                `INSERT INTO InventoryLogs (product_id, user_id, action_type, quantity_change, notes)
-                 VALUES (?, ?, 'PURCHASE', ?, ?)`,
-                [item.product_id, userId, item.quantity, `Purchase Order #${purchaseId}`]
+                `INSERT INTO InventoryLogs (product_id, user_id, action_type, quantity_change, notes, owner_id)
+                 VALUES (?, ?, 'PURCHASE', ?, ?, ?)`,
+                [item.product_id, userId, item.quantity, `Purchase Order #${purchaseId}`, ownerId]
             );
         }
 
@@ -75,15 +77,23 @@ exports.createPurchase = async (req, res) => {
 
 exports.getAllPurchases = async (req, res) => {
     try {
-        const [purchases] = await db.query(
-            `SELECT p.*, s.name AS supplier_name, u.name AS user_name 
+        const ownerId = getOwnerId(req.user);
+        let sql = `SELECT p.*, s.name AS supplier_name, u.name AS user_name 
              FROM Purchases p
              LEFT JOIN Suppliers s ON p.supplier_id = s.id
-             LEFT JOIN Users u ON p.user_id = u.id
-             ORDER BY p.id DESC`
-        );
+             LEFT JOIN Users u ON p.user_id = u.id`;
+        const params = [];
+
+        if (ownerId) {
+            sql += ` WHERE (p.owner_id = ? OR p.owner_id IS NULL)`;
+            params.push(ownerId);
+        }
+
+        sql += ` ORDER BY p.id DESC`;
+        const [purchases] = await db.query(sql, params);
         return res.json({ success: true, purchases });
     } catch (error) {
+        console.error('getAllPurchases error:', error);
         return res.status(500).json({ success: false, message: 'Error fetching purchase orders' });
     }
 };

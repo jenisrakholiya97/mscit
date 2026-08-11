@@ -1,8 +1,11 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const dotenv = require('dotenv');
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+const db = require('./config/db');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -36,11 +39,13 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 
-// Health Check Endpoint
-app.get('/health', (req, res) => {
+// Enhanced Health Check Endpoint
+app.get('/health', async (req, res) => {
+    const dbStatus = await db.testConnection();
     res.json({
-        status: 'UP',
+        status: dbStatus.connected ? 'UP' : 'DEGRADED',
         service: 'AI-Based Inventory Management Backend API',
+        database: dbStatus.connected ? 'CONNECTED' : `DISCONNECTED: ${dbStatus.error}`,
         timestamp: new Date().toISOString()
     });
 });
@@ -56,8 +61,15 @@ app.use((err, req, res, next) => {
     res.status(500).json({ success: false, message: 'Internal Server Error', error: err.message });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`=================================================`);
     console.log(`Backend Server running on port ${PORT}`);
+    const dbStatus = await db.testConnection();
+    if (dbStatus.connected) {
+        console.log(`Database Connection: SUCCESS ✓ (MySQL host: ${process.env.DB_HOST || 'localhost'}, db: ${process.env.DB_NAME || 'inventory_db'})`);
+    } else {
+        console.warn(`Database Connection: WARNING ⚠️ (${dbStatus.error})`);
+        console.warn(`Tip: If using Docker, run: 'docker compose up -d' to start MySQL database.`);
+    }
     console.log(`=================================================`);
 });

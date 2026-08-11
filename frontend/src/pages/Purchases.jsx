@@ -90,7 +90,7 @@ const Purchases = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Purchase Management</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Create purchase orders and restock inventory from suppliers</p>

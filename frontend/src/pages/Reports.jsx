@@ -60,12 +60,12 @@ const Reports = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Automated System Reports</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Generate daily & monthly sales, purchases, profit & inventory valuation reports</p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" onClick={exportToExcel} disabled={reportData.length === 0}>
             <FileSpreadsheet size={16} /> Export Excel
           </button>
@@ -76,7 +76,7 @@ const Reports = () => {
       </div>
 
       {/* Filter Tabs */}
-      <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', gap: '0.75rem' }}>
+      <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
         {['sales', 'purchases', 'inventory'].map(t => (
           <button
             key={t}

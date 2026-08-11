@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { Sun, Moon, Bell, Search, AlertCircle } from 'lucide-react';
+import { Sun, Moon, Bell, Search, Menu } from 'lucide-react';
 import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
-const Header = () => {
+const Header = ({ onToggleSidebar }) => {
   const { theme, toggleTheme } = useTheme();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -34,7 +34,7 @@ const Header = () => {
       height: '65px',
       background: 'var(--bg-secondary)',
       borderBottom: '1px solid var(--border-color)',
-      padding: '0 1.75rem',
+      padding: '0 1rem',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -42,24 +42,48 @@ const Header = () => {
       top: 0,
       zIndex: 90
     }}>
-      {/* Search Input */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '320px', position: 'relative' }}>
-        <Search size={18} style={{ position: 'absolute', left: '12px', color: 'var(--text-muted)' }} />
-        <input
-          type="text"
-          placeholder="Quick search products, barcodes..."
-          className="form-input"
-          style={{ paddingLeft: '2.4rem', height: '38px' }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && e.target.value.trim()) {
-              navigate(`/products?search=${encodeURIComponent(e.target.value.trim())}`);
-            }
-          }}
-        />
+      {/* Left section: Hamburger button & Quick Search */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, maxWidth: '400px' }}>
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            style={{
+              background: 'var(--bg-primary)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-main)',
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
+            title="Toggle Navigation Menu"
+          >
+            <Menu size={20} />
+          </button>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', position: 'relative' }}>
+          <Search size={18} style={{ position: 'absolute', left: '12px', color: 'var(--text-muted)' }} />
+          <input
+            type="text"
+            placeholder="Search products..."
+            className="form-input"
+            style={{ paddingLeft: '2.4rem', height: '38px' }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.target.value.trim()) {
+                navigate(`/products?search=${encodeURIComponent(e.target.value.trim())}`);
+              }
+            }}
+          />
+        </div>
       </div>
 
-      {/* Action Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+      {/* Right section: Action Controls & User info */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
         {/* Low Stock Alert Dropdown */}
         <div style={{ position: 'relative' }}>
           <button
@@ -106,13 +130,13 @@ const Header = () => {
               position: 'absolute',
               right: 0,
               top: '48px',
-              width: '320px',
+              width: '290px',
               padding: '1rem',
               zIndex: 200,
               boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Low Stock Alerts ({lowStockCount})</span>
+                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Low Stock Alerts ({lowStockCount})</span>
               </div>
               {lowStockItems.length === 0 ? (
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.5rem' }}>
@@ -124,7 +148,7 @@ const Header = () => {
                     <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem', background: 'var(--bg-primary)', borderRadius: '8px' }}>
                       <div>
                         <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>{item.name}</div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--danger)' }}>Qty: {item.quantity} (Reorder level: {item.reorder_level})</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--danger)' }}>Qty: {item.quantity} (Reorder: {item.reorder_level})</div>
                       </div>
                       <button 
                         className="btn btn-sm btn-primary" 
@@ -160,10 +184,10 @@ const Header = () => {
           {theme === 'dark' ? <Sun size={18} color="#f59e0b" /> : <Moon size={18} color="#6366f1" />}
         </button>
 
-        {/* User Info */}
-        <div style={{ fontSize: '0.85rem', textAlign: 'right' }}>
-          <div style={{ fontWeight: 600 }}>{user?.name}</div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{user?.email}</div>
+        {/* User Info (Hidden on very small screens, displayed on tablets/desktops) */}
+        <div style={{ fontSize: '0.85rem', textAlign: 'right', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{user?.name}</div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{user?.role}</div>
         </div>
       </div>
     </header>

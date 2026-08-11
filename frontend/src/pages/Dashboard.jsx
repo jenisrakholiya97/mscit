@@ -83,16 +83,18 @@ const Dashboard = () => {
         padding: '1.5rem 1.75rem',
         background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
         display: 'flex',
+        flexWrap: 'wrap',
+        gap: '1rem',
         alignItems: 'center',
         justifyContent: 'space-between'
       }}>
         <div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Retail Intelligence Overview</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.2rem' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Retail Intelligence Overview</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginTop: '0.2rem' }}>
             Real-time stock monitoring & AI-driven demand analytics
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button className="btn btn-primary" onClick={() => navigate('/pos')}>
             <ShoppingCart size={18} /> Launch POS
           </button>
@@ -103,7 +105,7 @@ const Dashboard = () => {
       </div>
 
       {/* KPI Cards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
         <StatCard title="Total Products" value={kpis.total_products || 0} icon={Package} color="info" trend="Active catalog" />
         <StatCard title="Total Revenue" value={`$${(kpis.total_revenue || 0).toLocaleString()}`} icon={DollarSign} color="success" trend="+14% this month" />
         <StatCard title="Estimated Profit" value={`$${(kpis.estimated_profit || 0).toLocaleString()}`} icon={TrendingUp} color="primary" trend="Optimal margin" />
@@ -112,7 +114,7 @@ const Dashboard = () => {
       </div>
 
       {/* Charts & Fast Moving Items Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
         {/* Sales Graph */}
         <div className="glass-panel" style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>

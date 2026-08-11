@@ -14,8 +14,8 @@
   --danger: #ef4444;
   --info: #3b82f6;
   --shadow-glow: 0 8px 32px 0 rgba(99, 102, 241, 0.25);
-  --font-family: 'Inter', sans-serif;
-  --font-heading: 'Outfit', sans-serif;
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Outfit', system-ui, -apple-system, sans-serif;
 }
 
 [data-theme="light"] {
@@ -162,12 +162,14 @@ h1, h2, h3, h4, h5, h6 {
 .custom-table-container {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .custom-table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
+  min-width: 600px;
 }
 
 .custom-table th {
@@ -178,12 +180,14 @@ h1, h2, h3, h4, h5, h6 {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
 }
 
 .custom-table td {
   padding: 0.9rem 1rem;
   border-bottom: 1px solid var(--border-color);
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .custom-table tbody tr:hover {
@@ -197,8 +201,8 @@ h1, h2, h3, h4, h5, h6 {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(5px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -216,6 +220,67 @@ h1, h2, h3, h4, h5, h6 {
   overflow-y: auto;
   padding: 1.75rem;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Sidebar Drawer Overlay for Mobile */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+  z-index: 95;
+  display: block;
+}
+
+/* Sidebar Container Breakpoint Control */
+@media (min-width: 1024px) {
+  .sidebar-container {
+    transform: translateX(0) !important;
+  }
+  .sidebar-overlay {
+    display: none !important;
+  }
+  .mobile-hamburger-btn {
+    display: none !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .sidebar-container {
+    transform: translateX(-100%);
+    box-shadow: 0 0 35px rgba(0,0,0,0.5);
+  }
+  .sidebar-container.open {
+    transform: translateX(0) !important;
+  }
+  .mobile-hamburger-btn {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .modal-content {
+    padding: 1.25rem;
+    max-width: 95vw;
+    border-radius: 14px;
+  }
+
+  .custom-table th, .custom-table td {
+    padding: 0.65rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .glass-card {
+    padding: 1rem;
+  }
+
+  .btn {
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+  }
 }
 
 /* Scrollbar */

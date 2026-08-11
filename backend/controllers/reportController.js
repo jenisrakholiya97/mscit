@@ -1,43 +1,59 @@
 const db = require('../config/db');
+const { getOwnerId } = require('../utils/authUtils');
 
 exports.getDashboardStats = async (req, res) => {
     try {
-        const [[{ total_products }]] = await db.query('SELECT COUNT(*) as total_products FROM Products');
+        const ownerId = getOwnerId(req.user);
+        const filterClause = ownerId ? 'WHERE (owner_id = ? OR owner_id IS NULL)' : '';
+        const filterParams = ownerId ? [ownerId] : [];
+
+        const [[{ total_products }]] = await db.query(
+            `SELECT COUNT(*) as total_products FROM Products ${filterClause}`,
+            filterParams
+        );
         const [[{ total_sales_count, total_revenue }]] = await db.query(
-            'SELECT COUNT(*) as total_sales_count, COALESCE(SUM(total_amount), 0) as total_revenue FROM Sales'
+            `SELECT COUNT(*) as total_sales_count, COALESCE(SUM(total_amount), 0) as total_revenue FROM Sales ${filterClause}`,
+            filterParams
         );
         const [[{ total_purchases_count, total_purchase_cost }]] = await db.query(
-            'SELECT COUNT(*) as total_purchases_count, COALESCE(SUM(total_amount), 0) as total_purchase_cost FROM Purchases'
+            `SELECT COUNT(*) as total_purchases_count, COALESCE(SUM(total_amount), 0) as total_purchase_cost FROM Purchases ${filterClause}`,
+            filterParams
         );
+
+        const prodFilter = ownerId ? `AND (owner_id = ${parseInt(ownerId, 10)} OR owner_id IS NULL)` : '';
+
         const [[{ low_stock_count }]] = await db.query(
-            'SELECT COUNT(*) as low_stock_count FROM Products WHERE quantity <= reorder_level'
+            `SELECT COUNT(*) as low_stock_count FROM Products WHERE quantity <= reorder_level ${prodFilter}`
         );
         const [[{ out_of_stock_count }]] = await db.query(
-            'SELECT COUNT(*) as out_of_stock_count FROM Products WHERE quantity = 0'
+            `SELECT COUNT(*) as out_of_stock_count FROM Products WHERE quantity = 0 ${prodFilter}`
         );
         const [[{ near_expiry_count }]] = await db.query(
-            'SELECT COUNT(*) as near_expiry_count FROM Products WHERE expiry_date IS NOT NULL AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 60 DAY)'
+            `SELECT COUNT(*) as near_expiry_count FROM Products WHERE expiry_date IS NOT NULL AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 60 DAY) ${prodFilter}`
         );
 
-        // Approximate net profit = total_revenue - total_purchase_cost
         const estimated_profit = Math.max(0, total_revenue - (total_purchase_cost * 0.7));
 
-        // Monthly sales trend (last 6 months)
+        // Monthly sales trend
+        const salesFilter = ownerId ? `WHERE (owner_id = ${parseInt(ownerId, 10)} OR owner_id IS NULL)` : '';
         const [monthlySales] = await db.query(
             `SELECT DATE_FORMAT(created_at, '%b %Y') as month_name, 
                     SUM(total_amount) as revenue,
                     COUNT(id) as orders
              FROM Sales
+             ${salesFilter}
              GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b %Y')
              ORDER BY MIN(created_at) ASC
              LIMIT 6`
         );
 
         // Top selling products
+        const topProdFilter = ownerId ? `WHERE (p.owner_id = ${parseInt(ownerId, 10)} OR p.owner_id IS NULL)` : '';
         const [topProducts] = await db.query(
             `SELECT p.name, SUM(sd.quantity) as total_units_sold, SUM(sd.total_price) as total_revenue
              FROM SalesDetails sd
              JOIN Products p ON sd.product_id = p.id
+             ${topProdFilter}
              GROUP BY p.id, p.name
              ORDER BY total_units_sold DESC
              LIMIT 5`
@@ -61,47 +77,46 @@ exports.getDashboardStats = async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching dashboard stats:', error);
-        return res.status(500).json({ success: false, message: 'Failed to load dashboard metrics' });
+        return res.status(500).json({ success: false, message: 'Failed to fetch dashboard metrics' });
+    }
+};
+
+exports.getSalesReport = async (req, res) => {
+    try {
+        const ownerId = getOwnerId(req.user);
+        let sql = `SELECT s.*, u.name AS seller_name 
+             FROM Sales s 
+             LEFT JOIN Users u ON s.user_id = u.id`;
+        const params = [];
+        if (ownerId) {
+            sql += ` WHERE (s.owner_id = ? OR s.owner_id IS NULL)`;
+            params.push(ownerId);
+        }
+        sql += ` ORDER BY s.id DESC LIMIT 100`;
+
+        const [sales] = await db.query(sql, params);
+        return res.json({ success: true, count: sales.length, sales });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Error generating sales report' });
     }
 };
 
 exports.getReportsData = async (req, res) => {
     try {
-        const { type = 'sales' } = req.query;
-
-        if (type === 'sales') {
-            const [rows] = await db.query(
-                `SELECT s.id, s.customer_name, s.payment_method, s.subtotal, s.discount, s.tax_gst, s.total_amount, s.created_at, u.name as cashier
-                 FROM Sales s
-                 LEFT JOIN Users u ON s.user_id = u.id
-                 ORDER BY s.id DESC`
-            );
-            return res.json({ success: true, type: 'sales', data: rows });
+        const ownerId = getOwnerId(req.user);
+        let sql = `SELECT s.*, u.name AS seller_name 
+             FROM Sales s 
+             LEFT JOIN Users u ON s.user_id = u.id`;
+        const params = [];
+        if (ownerId) {
+            sql += ` WHERE (s.owner_id = ? OR s.owner_id IS NULL)`;
+            params.push(ownerId);
         }
+        sql += ` ORDER BY s.id DESC LIMIT 100`;
 
-        if (type === 'purchases') {
-            const [rows] = await db.query(
-                `SELECT p.id, p.total_amount, p.status, p.created_at, s.name as supplier_name, u.name as created_by
-                 FROM Purchases p
-                 LEFT JOIN Suppliers s ON p.supplier_id = s.id
-                 LEFT JOIN Users u ON p.user_id = u.id
-                 ORDER BY p.id DESC`
-            );
-            return res.json({ success: true, type: 'purchases', data: rows });
-        }
-
-        if (type === 'inventory') {
-            const [rows] = await db.query(
-                `SELECT p.id, p.name, c.category_name, p.cost_price, p.selling_price, p.quantity, (p.quantity * p.cost_price) as stock_valuation
-                 FROM Products p
-                 LEFT JOIN Categories c ON p.category_id = c.id
-                 ORDER BY p.name ASC`
-            );
-            return res.json({ success: true, type: 'inventory', data: rows });
-        }
-
-        return res.status(400).json({ success: false, message: 'Invalid report type requested' });
+        const [sales] = await db.query(sql, params);
+        return res.json({ success: true, count: sales.length, sales });
     } catch (error) {
-        return res.status(500).json({ success: false, message: 'Error generating report data' });
+        return res.status(500).json({ success: false, message: 'Error generating reports data' });
     }
 };

@@ -8,9 +8,12 @@ CREATE TABLE IF NOT EXISTS Users (
     name VARCHAR(100) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role ENUM('Admin', 'Store Manager', 'Employee') NOT NULL DEFAULT 'Employee',
+    role VARCHAR(50) NOT NULL DEFAULT 'Staff',
     phone VARCHAR(20),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    permissions JSON DEFAULT NULL,
+    owner_id INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES Users(id) ON DELETE CASCADE
 );
 
 -- 2. Categories Table
@@ -136,3 +139,12 @@ CREATE TABLE IF NOT EXISTS AIForecast (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (product_id) REFERENCES Products(id) ON DELETE CASCADE
 );
+
+-- 12. RolePermissions Table
+CREATE TABLE IF NOT EXISTS RolePermissions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    role VARCHAR(50) NOT NULL UNIQUE,
+    permissions JSON NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+

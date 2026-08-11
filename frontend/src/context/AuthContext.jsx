@@ -10,6 +10,24 @@ export const AuthProvider = ({ children }) => {
   });
   const [token, setToken] = useState(() => localStorage.getItem('inventory_token') || null);
   const [loading, setLoading] = useState(false);
+  const [rolePermissions, setRolePermissions] = useState({});
+
+  useEffect(() => {
+    if (token) {
+      fetchPermissions();
+    }
+  }, [token]);
+
+  const fetchPermissions = async () => {
+    try {
+      const res = await api.get('/users/permissions');
+      if (res.data.success) {
+        setRolePermissions(res.data.permissions || {});
+      }
+    } catch (e) {
+      // quiet fail
+    }
+  };
 
   const login = async (email, password) => {
     setLoading(true);
@@ -20,12 +38,32 @@ export const AuthProvider = ({ children }) => {
         setUser(res.data.user);
         localStorage.setItem('inventory_token', res.data.token);
         localStorage.setItem('inventory_user', JSON.stringify(res.data.user));
+        fetchPermissions();
         return { success: true };
       }
     } catch (err) {
       return { 
         success: false, 
         message: err.response?.data?.message || 'Invalid email or password' 
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const register = async (name, email, password, role = 'Staff', phone = '') => {
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/register', { name, email, password, role, phone });
+      if (res.data.success) {
+        const loginRes = await login(email, password);
+        return loginRes.success ? { success: true } : { success: true, message: 'Registered successfully! Please log in.' };
+      }
+      return { success: false, message: res.data.message || 'Registration failed' };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Error during registration. Please try again.'
       };
     } finally {
       setLoading(false);
@@ -39,11 +77,75 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('inventory_user');
   };
 
-  const isAdmin = user?.role === 'Admin';
-  const isManager = user?.role === 'Store Manager' || isAdmin;
+  // Normalize role names
+  const normalizeRole = (r) => {
+    if (!r) return 'Staff';
+    if (r === 'Owner' || r === 'Admin') return 'Owner';
+    if (r === 'Manager' || r === 'Store Manager') return 'Manager';
+    return 'Staff';
+  };
+
+  const currentNormalizedRole = normalizeRole(user?.role);
+  const isOwner = currentNormalizedRole === 'Owner';
+  const isManager = currentNormalizedRole === 'Manager' || isOwner;
+  const isStaff = Boolean(user);
+
+  // Legacy mappings for backwards compatibility
+  const isAdmin = isOwner;
+
+  const hasPermission = (permissionKey) => {
+    if (!user) return false;
+    if (isOwner) return true; // Owner always has all permissions
+    
+    // 1. Check individual user-specific permission override first if present
+    if (user.permissions && user.permissions[permissionKey] !== undefined) {
+      return Boolean(user.permissions[permissionKey]);
+    }
+
+    // 2. Fallback to role permissions matrix
+    const perms = rolePermissions[currentNormalizedRole];
+    if (perms && perms[permissionKey] !== undefined) {
+      return Boolean(perms[permissionKey]);
+    }
+    return isManager; // Fallback for managers
+  };
+
+  const updatePermissionsMatrix = async (targetRole, updatedPerms) => {
+    if (!isOwner) {
+      return { success: false, message: 'Only an Owner can edit role permissions.' };
+    }
+    try {
+      const res = await api.put('/users/permissions', { role: targetRole, permissions: updatedPerms });
+      if (res.data.success) {
+        setRolePermissions(prev => ({
+          ...prev,
+          [targetRole]: updatedPerms
+        }));
+        return { success: true, message: res.data.message };
+      }
+      return { success: false, message: res.data.message };
+    } catch (err) {
+      return { success: false, message: err.response?.data?.message || 'Failed to update permissions' };
+    }
+  };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, isAdmin, isManager }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      token, 
+      loading, 
+      login, 
+      register, 
+      logout, 
+      isOwner, 
+      isManager, 
+      isStaff, 
+      isAdmin,
+      rolePermissions,
+      hasPermission,
+      updatePermissionsMatrix,
+      fetchPermissions
+    }}>
       {children}
     </AuthContext.Provider>
   );

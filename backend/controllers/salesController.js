@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { getOwnerId } = require('../utils/authUtils');
 
 exports.createSale = async (req, res) => {
     const connection = await db.getConnection();
@@ -7,6 +8,7 @@ exports.createSale = async (req, res) => {
 
         const { customer_name, customer_phone, discount = 0, tax_gst = 0, payment_method = 'Cash', items } = req.body;
         const userId = req.user ? req.user.id : null;
+        const ownerId = getOwnerId(req.user);
 
         if (!items || !Array.isArray(items) || items.length === 0) {
             await connection.rollback();
@@ -53,20 +55,20 @@ exports.createSale = async (req, res) => {
         // Find or create customer if phone provided
         let customerId = null;
         if (customer_phone) {
-            const [cust] = await connection.query('SELECT id FROM Customers WHERE phone = ?', [customer_phone]);
+            const [cust] = await connection.query('SELECT id FROM Customers WHERE phone = ? AND (owner_id = ? OR owner_id IS NULL)', [customer_phone, ownerId]);
             if (cust.length > 0) {
                 customerId = cust[0].id;
             } else if (customer_name) {
-                const [newCust] = await connection.query('INSERT INTO Customers (name, phone) VALUES (?, ?)', [customer_name, customer_phone]);
+                const [newCust] = await connection.query('INSERT INTO Customers (name, phone, owner_id) VALUES (?, ?, ?)', [customer_name, customer_phone, ownerId]);
                 customerId = newCust.insertId;
             }
         }
 
-        // Insert Sale record
+        // Insert Sale record with owner_id
         const [saleResult] = await connection.query(
-            `INSERT INTO Sales (customer_id, customer_name, user_id, subtotal, discount, tax_gst, total_amount, payment_method)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [customerId, customer_name || 'Walk-in Customer', userId, subtotal, totalDiscount, totalTax, totalAmount, payment_method]
+            `INSERT INTO Sales (customer_id, customer_name, user_id, subtotal, discount, tax_gst, total_amount, payment_method, owner_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [customerId, customer_name || 'Walk-in Customer', userId, subtotal, totalDiscount, totalTax, totalAmount, payment_method, ownerId]
         );
 
         const saleId = saleResult.insertId;
@@ -85,9 +87,9 @@ exports.createSale = async (req, res) => {
             );
 
             await connection.query(
-                `INSERT INTO InventoryLogs (product_id, user_id, action_type, quantity_change, notes)
-                 VALUES (?, ?, 'SALE', ?, ?)`,
-                [item.product_id, userId, -item.quantity, `Sale #${saleId} to ${customer_name || 'Walk-in'}`]
+                `INSERT INTO InventoryLogs (product_id, user_id, action_type, quantity_change, notes, owner_id)
+                 VALUES (?, ?, 'SALE', ?, ?, ?)`,
+                [item.product_id, userId, -item.quantity, `Sale #${saleId} to ${customer_name || 'Walk-in'}`, ownerId]
             );
         }
 
@@ -120,14 +122,22 @@ exports.createSale = async (req, res) => {
 
 exports.getAllSales = async (req, res) => {
     try {
-        const [sales] = await db.query(
-            `SELECT s.*, u.name AS seller_name 
+        const ownerId = getOwnerId(req.user);
+        let sql = `SELECT s.*, u.name AS seller_name 
              FROM Sales s
-             LEFT JOIN Users u ON s.user_id = u.id
-             ORDER BY s.id DESC`
-        );
+             LEFT JOIN Users u ON s.user_id = u.id`;
+        const params = [];
+
+        if (ownerId) {
+            sql += ` WHERE (s.owner_id = ? OR s.owner_id IS NULL)`;
+            params.push(ownerId);
+        }
+
+        sql += ` ORDER BY s.id DESC`;
+        const [sales] = await db.query(sql, params);
         return res.json({ success: true, count: sales.length, sales });
     } catch (error) {
+        console.error('getAllSales error:', error);
         return res.status(500).json({ success: false, message: 'Failed to fetch sales' });
     }
 };
@@ -135,13 +145,20 @@ exports.getAllSales = async (req, res) => {
 exports.getSaleById = async (req, res) => {
     try {
         const { id } = req.params;
-        const [saleRows] = await db.query(
-            `SELECT s.*, u.name AS seller_name 
+        const ownerId = getOwnerId(req.user);
+
+        let sql = `SELECT s.*, u.name AS seller_name 
              FROM Sales s 
              LEFT JOIN Users u ON s.user_id = u.id 
-             WHERE s.id = ?`,
-            [id]
-        );
+             WHERE s.id = ?`;
+        const params = [id];
+
+        if (ownerId) {
+            sql += ` AND (s.owner_id = ? OR s.owner_id IS NULL)`;
+            params.push(ownerId);
+        }
+
+        const [saleRows] = await db.query(sql, params);
         if (saleRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Sale not found' });
         }

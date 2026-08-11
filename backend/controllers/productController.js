@@ -1,8 +1,11 @@
 const db = require('../config/db');
+const { getOwnerId } = require('../utils/authUtils');
 
 exports.getAllProducts = async (req, res) => {
     try {
         const { category_id, search, low_stock, near_expiry } = req.query;
+        const ownerId = getOwnerId(req.user);
+
         let sql = `
             SELECT p.*, c.category_name, s.name AS supplier_name 
             FROM Products p
@@ -11,6 +14,11 @@ exports.getAllProducts = async (req, res) => {
             WHERE 1=1
         `;
         const params = [];
+
+        if (ownerId) {
+            sql += ` AND (p.owner_id = ? OR p.owner_id IS NULL)`;
+            params.push(ownerId);
+        }
 
         if (category_id) {
             sql += ` AND p.category_id = ?`;
@@ -42,14 +50,20 @@ exports.getAllProducts = async (req, res) => {
 
 exports.getProductById = async (req, res) => {
     try {
-        const [rows] = await db.query(
-            `SELECT p.*, c.category_name, s.name AS supplier_name 
+        const ownerId = getOwnerId(req.user);
+        let sql = `SELECT p.*, c.category_name, s.name AS supplier_name 
              FROM Products p 
              LEFT JOIN Categories c ON p.category_id = c.id 
              LEFT JOIN Suppliers s ON p.supplier_id = s.id 
-             WHERE p.id = ?`,
-            [req.params.id]
-        );
+             WHERE p.id = ?`;
+        const params = [req.params.id];
+
+        if (ownerId) {
+            sql += ` AND (p.owner_id = ? OR p.owner_id IS NULL)`;
+            params.push(ownerId);
+        }
+
+        const [rows] = await db.query(sql, params);
         if (rows.length === 0) {
             return res.status(404).json({ success: false, message: 'Product not found' });
         }
@@ -62,6 +76,7 @@ exports.getProductById = async (req, res) => {
 exports.createProduct = async (req, res) => {
     try {
         const { name, category_id, cost_price, selling_price, quantity, reorder_level, barcode, qr_code, supplier_id, expiry_date, image_url } = req.body;
+        const ownerId = getOwnerId(req.user);
         
         if (!name || cost_price === undefined || selling_price === undefined) {
             return res.status(400).json({ success: false, message: 'Name, cost price, and selling price are required.' });
@@ -71,8 +86,8 @@ exports.createProduct = async (req, res) => {
         const generatedQR = qr_code || `QR-${name.toUpperCase().replace(/\s+/g, '-')}-${generatedBarcode.slice(-4)}`;
 
         const [result] = await db.query(
-            `INSERT INTO Products (name, category_id, cost_price, selling_price, quantity, reorder_level, barcode, qr_code, supplier_id, expiry_date, image_url) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO Products (name, category_id, cost_price, selling_price, quantity, reorder_level, barcode, qr_code, supplier_id, expiry_date, image_url, owner_id) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 name, 
                 category_id || null, 
@@ -84,15 +99,16 @@ exports.createProduct = async (req, res) => {
                 generatedQR, 
                 supplier_id || null, 
                 expiry_date || null,
-                image_url || null
+                image_url || null,
+                ownerId
             ]
         );
 
         // Audit Log
         if (quantity > 0) {
             await db.query(
-                `INSERT INTO InventoryLogs (product_id, user_id, action_type, quantity_change, notes) VALUES (?, ?, 'STOCK_IN', ?, 'Initial product creation stock')`,
-                [result.insertId, req.user ? req.user.id : null, quantity]
+                `INSERT INTO InventoryLogs (product_id, user_id, action_type, quantity_change, notes, owner_id) VALUES (?, ?, 'STOCK_IN', ?, 'Initial product creation stock', ?)`,
+                [result.insertId, req.user ? req.user.id : null, quantity, ownerId]
             );
         }
 
@@ -111,6 +127,7 @@ exports.updateProduct = async (req, res) => {
     try {
         const { id } = req.params;
         const { name, category_id, cost_price, selling_price, quantity, reorder_level, barcode, qr_code, supplier_id, expiry_date, image_url } = req.body;
+        const ownerId = getOwnerId(req.user);
 
         const [existing] = await db.query('SELECT quantity FROM Products WHERE id = ?', [id]);
         if (existing.length === 0) {
@@ -118,6 +135,10 @@ exports.updateProduct = async (req, res) => {
         }
 
         const oldQty = existing[0].quantity;
+        const newQty = quantity !== undefined ? parseInt(quantity, 10) : oldQty;
+        const qtyDiff = newQty - oldQty;
+        const cleanExpiry = (expiry_date && String(expiry_date).trim() !== '') ? expiry_date : null;
+        const cleanImg = (image_url && String(image_url).trim() !== '') ? image_url : null;
 
         await db.query(
             `UPDATE Products SET 
@@ -131,16 +152,17 @@ exports.updateProduct = async (req, res) => {
                 qr_code = COALESCE(?, qr_code),
                 supplier_id = COALESCE(?, supplier_id),
                 expiry_date = ?,
-                image_url = COALESCE(?, image_url)
+                image_url = COALESCE(?, image_url),
+                owner_id = COALESCE(owner_id, ?)
              WHERE id = ?`,
-            [name, category_id, cost_price, selling_price, quantity, reorder_level, barcode, qr_code, supplier_id, expiry_date || null, image_url, id]
+            [name, category_id, cost_price, selling_price, newQty, reorder_level, barcode, qr_code, supplier_id, cleanExpiry, cleanImg, ownerId, id]
         );
 
-        if (quantity !== undefined && quantity !== oldQty) {
-            const diff = quantity - oldQty;
+        if (qtyDiff !== 0) {
             await db.query(
-                `INSERT INTO InventoryLogs (product_id, user_id, action_type, quantity_change, notes) VALUES (?, ?, 'ADJUSTMENT', ?, 'Manual product update')`,
-                [id, req.user ? req.user.id : null, diff]
+                `INSERT INTO InventoryLogs (product_id, user_id, action_type, quantity_change, notes, owner_id) 
+                 VALUES (?, ?, ?, ?, 'Manual stock update', ?)`,
+                [id, req.user ? req.user.id : null, qtyDiff > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT', Math.abs(qtyDiff), ownerId]
             );
         }
 
@@ -154,7 +176,16 @@ exports.updateProduct = async (req, res) => {
 exports.deleteProduct = async (req, res) => {
     try {
         const { id } = req.params;
-        const [result] = await db.query('DELETE FROM Products WHERE id = ?', [id]);
+        const ownerId = getOwnerId(req.user);
+
+        let sql = 'DELETE FROM Products WHERE id = ?';
+        const params = [id];
+        if (ownerId) {
+            sql += ' AND (owner_id = ? OR owner_id IS NULL)';
+            params.push(ownerId);
+        }
+
+        const [result] = await db.query(sql, params);
         if (result.affectedRows === 0) {
             return res.status(404).json({ success: false, message: 'Product not found' });
         }
@@ -166,31 +197,44 @@ exports.deleteProduct = async (req, res) => {
 
 exports.getLowStock = async (req, res) => {
     try {
-        const [products] = await db.query(
-            `SELECT p.*, c.category_name, s.name AS supplier_name
-             FROM Products p
-             LEFT JOIN Categories c ON p.category_id = c.id
-             LEFT JOIN Suppliers s ON p.supplier_id = s.id
-             WHERE p.quantity <= p.reorder_level
-             ORDER BY p.quantity ASC`
-        );
+        const ownerId = getOwnerId(req.user);
+        let sql = `SELECT p.*, c.category_name, s.name AS supplier_name 
+             FROM Products p 
+             LEFT JOIN Categories c ON p.category_id = c.id 
+             LEFT JOIN Suppliers s ON p.supplier_id = s.id 
+             WHERE p.quantity <= p.reorder_level`;
+        const params = [];
+
+        if (ownerId) {
+            sql += ` AND (p.owner_id = ? OR p.owner_id IS NULL)`;
+            params.push(ownerId);
+        }
+
+        const [products] = await db.query(sql, params);
         return res.json({ success: true, count: products.length, products });
     } catch (error) {
-        return res.status(500).json({ success: false, message: 'Error fetching low stock items' });
+        return res.status(500).json({ success: false, message: 'Failed to fetch low stock products' });
     }
 };
 
 exports.getNearExpiry = async (req, res) => {
     try {
-        const [products] = await db.query(
-            `SELECT p.*, c.category_name, DATEDIFF(p.expiry_date, CURDATE()) as days_until_expiry
-             FROM Products p
-             LEFT JOIN Categories c ON p.category_id = c.id
-             WHERE p.expiry_date IS NOT NULL AND p.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 60 DAY)
-             ORDER BY p.expiry_date ASC`
-        );
+        const ownerId = getOwnerId(req.user);
+        let sql = `SELECT p.*, c.category_name, s.name AS supplier_name 
+             FROM Products p 
+             LEFT JOIN Categories c ON p.category_id = c.id 
+             LEFT JOIN Suppliers s ON p.supplier_id = s.id 
+             WHERE p.expiry_date IS NOT NULL AND p.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 60 DAY)`;
+        const params = [];
+
+        if (ownerId) {
+            sql += ` AND (p.owner_id = ? OR p.owner_id IS NULL)`;
+            params.push(ownerId);
+        }
+
+        const [products] = await db.query(sql, params);
         return res.json({ success: true, count: products.length, products });
     } catch (error) {
-        return res.status(500).json({ success: false, message: 'Error fetching near expiry items' });
+        return res.status(500).json({ success: false, message: 'Failed to fetch near expiry products' });
     }
 };

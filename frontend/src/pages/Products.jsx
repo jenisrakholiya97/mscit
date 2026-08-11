@@ -17,7 +17,7 @@ import {
 import { useSearchParams } from 'react-router-dom';
 
 const Products = () => {
-  const { isManager, isAdmin } = useAuth();
+  const { isOwner, isManager, hasPermission } = useAuth();
   const [searchParams] = useSearchParams();
 
   const [products, setProducts] = useState([]);
@@ -270,12 +270,12 @@ const Products = () => {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.4rem' }}>
-                        {isManager && (
+                        {hasPermission('manage_products') && (
                           <button className="btn btn-sm btn-secondary" onClick={() => handleOpenEditModal(p)} title="Edit">
                             <Edit size={14} />
                           </button>
                         )}
-                        {isAdmin && (
+                        {hasPermission('delete_products') && (
                           <button className="btn btn-sm btn-danger" onClick={() => handleDeleteProduct(p.id, p.name)} title="Delete">
                             <Trash2 size={14} />
                           </button>
@@ -323,7 +323,7 @@ const Products = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.85rem' }}>
                 <div>
                   <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Category</label>
                   <select 
@@ -348,7 +348,7 @@ const Products = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.85rem' }}>
                 <div>
                   <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Cost Price ($)</label>
                   <input 
@@ -383,7 +383,7 @@ const Products = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.85rem' }}>
                 <div>
                   <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Reorder Level</label>
                   <input 
@@ -404,7 +404,7 @@ const Products = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.85rem' }}>
                 <div>
                   <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Barcode (Auto-generated if empty)</label>
                   <input 

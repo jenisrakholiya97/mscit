@@ -1,16 +1,24 @@
 const db = require('../config/db');
+const { getOwnerId } = require('../utils/authUtils');
 
 exports.getAllSuppliers = async (req, res) => {
     try {
-        const [suppliers] = await db.query(
-            `SELECT s.*, COUNT(p.id) AS product_count 
+        const ownerId = getOwnerId(req.user);
+        let sql = `SELECT s.*, COUNT(p.id) AS product_count 
              FROM Suppliers s 
-             LEFT JOIN Products p ON s.id = p.supplier_id 
-             GROUP BY s.id 
-             ORDER BY s.name ASC`
-        );
+             LEFT JOIN Products p ON s.id = p.supplier_id`;
+        const params = [];
+
+        if (ownerId) {
+            sql += ` WHERE (s.owner_id = ? OR s.owner_id IS NULL)`;
+            params.push(ownerId);
+        }
+
+        sql += ` GROUP BY s.id ORDER BY s.name ASC`;
+        const [suppliers] = await db.query(sql, params);
         return res.json({ success: true, suppliers });
     } catch (error) {
+        console.error('getAllSuppliers error:', error);
         return res.status(500).json({ success: false, message: 'Failed to fetch suppliers' });
     }
 };
@@ -18,15 +26,17 @@ exports.getAllSuppliers = async (req, res) => {
 exports.createSupplier = async (req, res) => {
     try {
         const { name, phone, email, address } = req.body;
+        const ownerId = getOwnerId(req.user);
         if (!name || !phone) {
             return res.status(400).json({ success: false, message: 'Name and phone are required' });
         }
         const [result] = await db.query(
-            'INSERT INTO Suppliers (name, phone, email, address) VALUES (?, ?, ?, ?)',
-            [name, phone, email || null, address || null]
+            'INSERT INTO Suppliers (name, phone, email, address, owner_id) VALUES (?, ?, ?, ?, ?)',
+            [name, phone, email || null, address || null, ownerId]
         );
         return res.status(201).json({ success: true, supplierId: result.insertId, message: 'Supplier added' });
     } catch (error) {
+        console.error('createSupplier error:', error);
         return res.status(500).json({ success: false, message: 'Failed to create supplier' });
     }
 };
@@ -35,10 +45,16 @@ exports.updateSupplier = async (req, res) => {
     try {
         const { id } = req.params;
         const { name, phone, email, address } = req.body;
-        await db.query(
-            'UPDATE Suppliers SET name = COALESCE(?, name), phone = COALESCE(?, phone), email = COALESCE(?, email), address = COALESCE(?, address) WHERE id = ?',
-            [name, phone, email, address, id]
-        );
+        const ownerId = getOwnerId(req.user);
+
+        let sql = 'UPDATE Suppliers SET name = COALESCE(?, name), phone = COALESCE(?, phone), email = COALESCE(?, email), address = COALESCE(?, address), owner_id = COALESCE(owner_id, ?) WHERE id = ?';
+        const params = [name, phone, email, address, ownerId, id];
+        if (ownerId) {
+            sql += ' AND (owner_id = ? OR owner_id IS NULL)';
+            params.push(ownerId);
+        }
+
+        await db.query(sql, params);
         return res.json({ success: true, message: 'Supplier updated' });
     } catch (error) {
         return res.status(500).json({ success: false, message: 'Failed to update supplier' });
@@ -47,7 +63,15 @@ exports.updateSupplier = async (req, res) => {
 
 exports.deleteSupplier = async (req, res) => {
     try {
-        await db.query('DELETE FROM Suppliers WHERE id = ?', [req.params.id]);
+        const ownerId = getOwnerId(req.user);
+        let sql = 'DELETE FROM Suppliers WHERE id = ?';
+        const params = [req.params.id];
+        if (ownerId) {
+            sql += ' AND (owner_id = ? OR owner_id IS NULL)';
+            params.push(ownerId);
+        }
+
+        await db.query(sql, params);
         return res.json({ success: true, message: 'Supplier deleted' });
     } catch (error) {
         return res.status(500).json({ success: false, message: 'Failed to delete supplier' });
