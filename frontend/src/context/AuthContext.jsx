@@ -70,6 +70,46 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const forgotPassword = async (email) => {
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/forgot-password', { email });
+      if (res.data.success) {
+        return { 
+          success: true, 
+          message: res.data.message, 
+          resetToken: res.data.resetToken 
+        };
+      }
+      return { success: false, message: res.data.message || 'Failed to generate reset code.' };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Error requesting password reset. Please try again.'
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetPassword = async (email, resetToken, newPassword) => {
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/reset-password', { email, resetToken, newPassword });
+      if (res.data.success) {
+        return { success: true, message: res.data.message };
+      }
+      return { success: false, message: res.data.message || 'Failed to reset password.' };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Error resetting password. Please check your reset code.'
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     setUser(null);
     setToken(null);
@@ -136,6 +176,8 @@ export const AuthProvider = ({ children }) => {
       loading, 
       login, 
       register, 
+      forgotPassword,
+      resetPassword,
       logout, 
       isOwner, 
       isManager, 

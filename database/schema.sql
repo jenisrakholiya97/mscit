@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS Users (
     phone VARCHAR(20),
     permissions JSON DEFAULT NULL,
     owner_id INT DEFAULT NULL,
+    reset_token VARCHAR(255) DEFAULT NULL,
+    reset_token_expires DATETIME DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_id) REFERENCES Users(id) ON DELETE CASCADE
 );

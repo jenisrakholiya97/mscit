@@ -118,6 +118,19 @@ exports.register = async (req, res) => {
     }
 };
 
+// Ensure reset_token columns exist in Users table automatically
+(async () => {
+    try {
+        await db.query(`
+            ALTER TABLE Users 
+            ADD COLUMN reset_token VARCHAR(255) DEFAULT NULL,
+            ADD COLUMN reset_token_expires DATETIME DEFAULT NULL;
+        `);
+    } catch (e) {
+        // Columns already exist or database not initialized yet
+    }
+})();
+
 exports.getProfile = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT id, name, email, role, phone, created_at FROM Users WHERE id = ?', [req.user.id]);
@@ -129,3 +142,93 @@ exports.getProfile = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Error fetching profile.' });
     }
 };
+
+exports.forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email address is required.' });
+        }
+
+        const cleanEmail = email.trim().toLowerCase();
+        const [users] = await db.query('SELECT id, name, email FROM Users WHERE LOWER(email) = ?', [cleanEmail]);
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: 'No account found with this email address.' });
+        }
+
+        const user = users[0];
+        // Generate a secure 6-digit OTP reset token
+        const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        // Expiration in 15 minutes
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+        await db.query(
+            'UPDATE Users SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
+            [resetToken, expiresAt, user.id]
+        );
+
+        console.log(`[AUTH] Password Reset OTP for ${user.email}: ${resetToken}`);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Password reset code has been generated.',
+            resetToken, // Returned for instant UI entry & demo verification
+            email: user.email
+        });
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        return res.status(500).json({ success: false, message: 'Server error processing password reset request.' });
+    }
+};
+
+exports.resetPassword = async (req, res) => {
+    try {
+        const { email, resetToken, newPassword } = req.body;
+        if (!email || !resetToken || !newPassword) {
+            return res.status(400).json({ success: false, message: 'Email, reset code, and new password are required.' });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ success: false, message: 'New password must be at least 6 characters long.' });
+        }
+
+        const cleanEmail = email.trim().toLowerCase();
+        const [users] = await db.query(
+            'SELECT id, reset_token, reset_token_expires FROM Users WHERE LOWER(email) = ?',
+            [cleanEmail]
+        );
+
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: 'No account found with this email.' });
+        }
+
+        const user = users[0];
+
+        if (!user.reset_token || user.reset_token !== resetToken.trim()) {
+            return res.status(400).json({ success: false, message: 'Invalid reset code. Please check and try again.' });
+        }
+
+        if (!user.reset_token_expires || new Date(user.reset_token_expires) < new Date()) {
+            return res.status(400).json({ success: false, message: 'Reset code has expired. Please request a new one.' });
+        }
+
+        // Hash new password & clear reset token
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await db.query(
+            'UPDATE Users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
+            [hashedPassword, user.id]
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: 'Password has been reset successfully! You can now log in with your new password.'
+        });
+    } catch (error) {
+        console.error('Reset password error:', error);
+        return res.status(500).json({ success: false, message: 'Server error resetting password.' });
+    }
+};
+
